@@ -712,6 +712,29 @@ textarea { resize:vertical; min-height:80px; line-height:1.6; }
 </div><!-- end workspace -->
 
 <!-- Settings Modal -->
+<!-- Lab Session Picker Modal -->
+<div class="modal-overlay" id="labPickerModal">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-title">🧪 選擇要納入時間軸的 Lab 資料</div>
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:12px">勾選要整合的檢驗批次，AI 將把 lab 結果插入時間軸對應日期</div>
+
+    <!-- Quick filter -->
+    <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
+      <span style="font-size:12px;color:var(--muted);align-self:center">快速篩選：</span>
+      <button class="btn btn-secondary btn-sm" onclick="labPickerSelectAll(true)">全選</button>
+      <button class="btn btn-secondary btn-sm" onclick="labPickerSelectAll(false)">全不選</button>
+    </div>
+
+    <!-- Session list -->
+    <div id="labPickerList" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;"></div>
+
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="runTimeline(false)">略過（不含 Lab）</button>
+      <button class="btn btn-primary"   onclick="runTimeline(true)">🗓 整理時間軸（含選取 Lab）</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="settingsModal">
   <div class="modal">
     <div class="modal-title">⚙️ Groq API 設定</div>
@@ -1038,11 +1061,62 @@ async function callGroq(system, user, outputEl, btnEl, btnTxtEl, btnLabel) {
 }
 
 // ── Generate Timeline ──────────────────────────
-async function generateTimeline() {
+function generateTimeline() {
   const raw = document.getElementById('rawEmr').value.trim();
   if (!raw) { alert('請先貼入急診 / 門診病歷資料'); return; }
 
-  const pt = getPatientInfo();
+  if (labSessions.length > 0) {
+    openLabPicker();
+  } else {
+    runTimeline(false);
+  }
+}
+
+function openLabPicker() {
+  const list = document.getElementById('labPickerList');
+  list.innerHTML = labSessions.map((s, i) => {
+    const cats = (s.categories || []).map(c => c.name).join('、');
+    return `<label style="display:flex;align-items:flex-start;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;font-size:13px;transition:background 0.1s" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''">
+      <input type="checkbox" class="lab-pick-cb" data-idx="${i}" checked style="margin-top:2px;flex-shrink:0;width:15px;height:15px;accent-color:var(--primary)">
+      <div>
+        <div style="font-weight:600">${s.date} &nbsp;<span style="font-size:11px;background:#f0f4ff;color:var(--primary);padding:1px 7px;border-radius:10px;font-weight:600">${s.source}</span></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">${cats || '(無分類)'}</div>
+      </div>
+    </label>`;
+  }).join('');
+  document.getElementById('labPickerModal').classList.add('active');
+}
+
+function labPickerSelectAll(checked) {
+  document.querySelectorAll('.lab-pick-cb').forEach(cb => cb.checked = checked);
+}
+
+async function runTimeline(withLabs) {
+  document.getElementById('labPickerModal').classList.remove('active');
+
+  const raw = document.getElementById('rawEmr').value.trim();
+  const pt  = getPatientInfo();
+
+  let selectedSessions = [];
+  if (withLabs) {
+    document.querySelectorAll('.lab-pick-cb:checked').forEach(cb => {
+      const idx = parseInt(cb.dataset.idx);
+      if (labSessions[idx]) selectedSessions.push(labSessions[idx]);
+    });
+  }
+
+  const hasLabs = selectedSessions.length > 0;
+
+  const labSection = hasLabs ? selectedSessions.map(s => {
+    const tests = (s.categories || []).map(cat =>
+      (cat.tests || []).map(t => {
+        const flag = t.flag && t.flag !== 'N' ? ` (${t.flag})` : '';
+        return `${t.name} ${t.value}${t.unit?' '+t.unit:''}${flag}`;
+      }).join(', ')
+    ).filter(Boolean).join('; ');
+    return `[${s.date} · ${s.source}] ${tests}`;
+  }).join('\n') : '';
+
   const sys = `You are a senior resident physician organizing patient medical records.
 Extract and organize ONLY the events explicitly stated in the raw records into a chronological Timeline written in English.
 
@@ -1056,9 +1130,13 @@ Format:
 - One event per line: date/time + brief description (under 15 words)
 - Strictly chronological order
 - Use standard abbreviations (c/o, s/p, Hx of, Dx, Tx, CXR, CBC, etc.)
+${hasLabs ? `- For lab data lines, use prefix "[Lab]" and list only abnormal/notable values concisely, e.g.:
+  1/20  [Lab] WBC 12.3↑, Hgb 9.8↓, Cr 1.8↑, Na 132↓
+- Place [Lab] lines at the correct date in the chronological order
+- Only flag values marked H/HH with ↑ and L/LL with ↓; omit normal values unless all results are normal` : ''}
 - Output only the timeline, no preamble`;
 
-  const usr = `Patient: ${pt}\n\nRaw medical records:\n${raw}`;
+  const usr = `Patient: ${pt}\n\nRaw medical records:\n${raw}${hasLabs ? `\n\nLab Results to integrate:\n${labSection}` : ''}`;
 
   switchTabByName('timeline');
   await callGroq(sys, usr,
@@ -1273,6 +1351,7 @@ pre{white-space:pre-wrap;font-family:inherit;font-size:13px;}
 
 // ── Modal close ────────────────────────────────
 document.getElementById('settingsModal').addEventListener('click', function(e) { if (e.target===this) closeSettings(); });
+document.getElementById('labPickerModal').addEventListener('click', function(e) { if (e.target===this) document.getElementById('labPickerModal').classList.remove('active'); });
 document.addEventListener('keydown', e => { if ((e.ctrlKey||e.metaKey) && e.key==='Enter') generateAll(); });
 
 if ('serviceWorker' in navigator) {
