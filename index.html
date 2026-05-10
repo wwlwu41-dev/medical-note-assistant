@@ -328,6 +328,15 @@ textarea { resize:vertical; min-height:80px; line-height:1.6; }
 
     <!-- Patient Info Bar -->
     <div class="patient-bar">
+      <!-- Cloud sync group -->
+      <div style="display:flex;align-items:center;gap:5px;flex-shrink:0;border-right:1px solid var(--border);padding-right:10px;margin-right:2px">
+        <div style="position:relative">
+          <input type="text" id="ptChart" style="width:96px;font-family:monospace;padding-right:24px" placeholder="病歷號" oninput="onChartInput()" onkeydown="if(event.key==='Enter')loadFromCloud()">
+          <span id="cloudDot" style="position:absolute;right:7px;top:50%;transform:translateY(-50%);width:7px;height:7px;border-radius:50%;background:#cbd5e1" title="尚未同步"></span>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="loadFromCloud()" id="cloudLoadBtn" title="載入此病歷號的資料" style="white-space:nowrap;padding:5px 8px">📥 載入</button>
+        <button class="btn btn-secondary btn-sm" onclick="saveToCloud()" id="cloudSaveBtn" title="儲存至雲端" style="white-space:nowrap;padding:5px 8px">☁️ 儲存</button>
+      </div>
       <input type="text"   id="ptName"   class="name-input" placeholder="姓名">
       <input type="number" id="ptAge"    class="age-input"  placeholder="年齡" min="0" max="150">
       <select id="ptGender" style="width:70px">
@@ -660,6 +669,25 @@ textarea { resize:vertical; min-height:80px; line-height:1.6; }
       </select>
     </div>
     <div class="alert alert-warn" style="margin-top:12px; font-size:12px;">🔒 Key 僅存於瀏覽器 localStorage，不外傳。</div>
+
+    <!-- Firebase Cloud Sync -->
+    <div style="border-top:1px solid var(--border);margin-top:18px;padding-top:16px">
+      <div style="font-size:14px;font-weight:700;margin-bottom:4px">☁️ Firebase 雲端同步</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px">輸入病歷號即可在電腦↔平板之間同步病人資料</div>
+      <div class="alert alert-success" style="font-size:12px;margin-bottom:12px">
+        免費設定步驟：<strong>console.firebase.google.com</strong> → 建立專案 → Firestore Database（測試模式）→ 專案設定 → 新增網頁應用程式 → 複製 apiKey 和 projectId
+      </div>
+      <div class="field">
+        <label style="font-size:12px;font-weight:600;color:var(--muted)">Firebase Project ID</label>
+        <input type="text" id="fbProjectIdInput" placeholder="your-project-id" style="font-family:monospace;font-size:13px">
+      </div>
+      <div class="field" style="margin-top:8px">
+        <label style="font-size:12px;font-weight:600;color:var(--muted)">Firebase API Key</label>
+        <input type="text" id="fbApiKeyInput" placeholder="AIzaSy..." style="font-family:monospace;font-size:13px">
+      </div>
+      <div id="fbStatus" style="font-size:11px;color:var(--muted);margin-top:6px"></div>
+    </div>
+
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeSettings()">取消</button>
       <button class="btn btn-primary" onclick="saveSettings()">儲存</button>
@@ -704,13 +732,24 @@ function switchTab(el) {
 function openSettings() {
   document.getElementById('apiKeyInput').value = apiKey;
   document.getElementById('modelSelect').value = model;
+  document.getElementById('fbProjectIdInput').value = localStorage.getItem('fb_projectId') || '';
+  document.getElementById('fbApiKeyInput').value    = localStorage.getItem('fb_apiKey')    || '';
+  const hasF = !!(localStorage.getItem('fb_projectId') && localStorage.getItem('fb_apiKey'));
+  document.getElementById('fbStatus').textContent = hasF ? '✅ 已設定，可使用雲端同步' : '';
   document.getElementById('settingsModal').classList.add('active');
 }
 function closeSettings() { document.getElementById('settingsModal').classList.remove('active'); }
 function saveSettings() {
-  const k = document.getElementById('apiKeyInput').value.trim();
-  const m = document.getElementById('modelSelect').value;
+  const k  = document.getElementById('apiKeyInput').value.trim();
+  const m  = document.getElementById('modelSelect').value;
   if (k) { apiKey = k; model = m; localStorage.setItem('groq_api_key', k); localStorage.setItem('groq_model', m); }
+  const fp = document.getElementById('fbProjectIdInput').value.trim();
+  const fk = document.getElementById('fbApiKeyInput').value.trim();
+  if (fp && fk) {
+    localStorage.setItem('fb_projectId', fp);
+    localStorage.setItem('fb_apiKey', fk);
+    db = null; // reset so initFirebase re-initializes
+  }
   closeSettings(); updateStatus();
 }
 function updateStatus() {
@@ -1461,6 +1500,181 @@ function copySystemReview() {
     .then(() => { const b=document.querySelector('#pane-system .output-actions .btn'); const t=b.textContent; b.textContent='✅ 已複製'; setTimeout(()=>b.textContent=t,1200); })
     .catch(() => alert('複製失敗，請手動選取'));
 }
+
+// ── Cloud Sync (Firebase) ──────────────────────
+let db = null;
+let autoSaveTimer = null;
+
+function loadFirebaseSDK() {
+  return new Promise((res, rej) => {
+    if (window.firebase?.firestore) { res(); return; }
+    const s1 = document.createElement('script');
+    s1.src = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js';
+    s1.onload = () => {
+      const s2 = document.createElement('script');
+      s2.src = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js';
+      s2.onload = res; s2.onerror = rej;
+      document.head.appendChild(s2);
+    };
+    s1.onerror = rej;
+    document.head.appendChild(s1);
+  });
+}
+
+async function initFirebase() {
+  const pid = localStorage.getItem('fb_projectId');
+  const fak = localStorage.getItem('fb_apiKey');
+  if (!pid || !fak) return false;
+  try {
+    await loadFirebaseSDK();
+    if (!db) {
+      const app = window.firebase.apps.length
+        ? window.firebase.apps[0]
+        : window.firebase.initializeApp({ apiKey: fak, projectId: pid, authDomain: `${pid}.firebaseapp.com` });
+      db = window.firebase.firestore(app);
+    }
+    return true;
+  } catch(e) { console.error(e); return false; }
+}
+
+function setCloudDot(state) {
+  const dot = document.getElementById('cloudDot');
+  if (!dot) return;
+  const colors = { idle:'#cbd5e1', saving:'#f59e0b', saved:'#10b981', error:'#ef4444' };
+  dot.style.background = colors[state] || colors.idle;
+  dot.title = { idle:'尚未同步', saving:'儲存中...', saved:'已同步', error:'同步失敗' }[state] || '';
+}
+
+function onChartInput() {
+  setCloudDot('idle');
+  scheduleAutoSave();
+}
+
+function scheduleAutoSave() {
+  clearTimeout(autoSaveTimer);
+  const chartId = document.getElementById('ptChart').value.trim();
+  if (!chartId) return;
+  autoSaveTimer = setTimeout(saveToCloud, 8000);
+}
+
+function collectPatientData() {
+  const get = id => { const el = document.getElementById(id); return el ? el.value : ''; };
+  return {
+    ptChart:   get('ptChart'),
+    ptName:    get('ptName'),
+    ptAge:     get('ptAge'),
+    ptGender:  get('ptGender'),
+    ptAdmDate: get('ptAdmDate'),
+    ptWard:    get('ptWard'),
+    rawEmr:    get('rawEmr'),
+    interview: get('interview'),
+    cc:        get('cc'),
+    o2Selected, o2Detail: get('o2Detail'),
+    vasoMode,   vasoDetail: get('vasoDetail'),
+    nutriSelected: [...nutriSelected],
+    nutriDetail: get('nutriDetail'),
+    abxList: JSON.parse(JSON.stringify(abxList)),
+    apList:  JSON.parse(JSON.stringify(apList)),
+    outTimeline: getBoxContent('out-timeline'),
+    outPi:       getBoxContent('out-pi'),
+    outAssess:   getBoxContent('out-assess'),
+    outFull:     getBoxContent('out-full'),
+    sysData:  sysData ? JSON.parse(JSON.stringify(sysData)) : null,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+function populatePatientData(data) {
+  const set = (id, v) => { const el = document.getElementById(id); if (el && v != null) el.value = v; };
+  set('ptName', data.ptName);  set('ptAge', data.ptAge);
+  set('ptGender', data.ptGender); set('ptAdmDate', data.ptAdmDate);
+  set('ptWard', data.ptWard);  set('rawEmr', data.rawEmr);
+  set('interview', data.interview); set('cc', data.cc);
+  set('o2Detail', data.o2Detail); set('vasoDetail', data.vasoDetail);
+  set('nutriDetail', data.nutriDetail);
+
+  // O2 tags
+  o2Selected = data.o2Selected || '';
+  document.querySelectorAll('#o2Tags .tag-btn').forEach(b => b.classList.toggle('active', b.dataset.val === o2Selected));
+
+  // Vaso
+  selectVaso(data.vasoMode || 'no');
+
+  // Nutrition tags
+  nutriSelected = data.nutriSelected || [];
+  document.querySelectorAll('#nutriTags .tag-btn').forEach(b => b.classList.toggle('active', nutriSelected.includes(b.dataset.val)));
+
+  // ABX & AP
+  abxList = data.abxList || []; renderAbx();
+  apList  = data.apList  || []; renderAP();
+
+  // Outputs
+  const setBox = (id, txt) => {
+    if (!txt) return;
+    const el = document.getElementById(id);
+    if (el) { el.innerHTML = ''; el.innerText = txt; }
+  };
+  setBox('out-timeline', data.outTimeline);
+  setBox('out-pi',       data.outPi);
+  setBox('out-assess',   data.outAssess);
+  setBox('out-full',     data.outFull);
+
+  // System data
+  if (data.sysData) { sysData = data.sysData; renderSystemView(sysData); }
+}
+
+async function saveToCloud() {
+  clearTimeout(autoSaveTimer);
+  const chartId = document.getElementById('ptChart').value.trim();
+  if (!chartId) { alert('請先填入病歷號'); return; }
+  const ok = await initFirebase();
+  if (!ok) { openSettings(); return; }
+
+  const btn = document.getElementById('cloudSaveBtn');
+  const orig = btn.innerHTML; btn.disabled = true; btn.innerHTML = '⏳';
+  setCloudDot('saving');
+  try {
+    await db.collection('patients').doc(chartId).set(collectPatientData());
+    setCloudDot('saved');
+    btn.innerHTML = '✅'; setTimeout(() => { btn.innerHTML = orig; btn.disabled = false; }, 1800);
+  } catch(e) {
+    setCloudDot('error');
+    alert('儲存失敗：' + e.message);
+    btn.innerHTML = orig; btn.disabled = false;
+  }
+}
+
+async function loadFromCloud() {
+  const chartId = document.getElementById('ptChart').value.trim();
+  if (!chartId) { alert('請先填入病歷號'); return; }
+  const ok = await initFirebase();
+  if (!ok) { openSettings(); return; }
+
+  const btn = document.getElementById('cloudLoadBtn');
+  const orig = btn.innerHTML; btn.disabled = true; btn.innerHTML = '⏳';
+  try {
+    const snap = await db.collection('patients').doc(chartId).get();
+    if (!snap.exists) {
+      alert(`找不到病歷號 ${chartId} 的資料\n\n這個病歷號尚未有任何儲存記錄。`);
+      btn.innerHTML = orig; btn.disabled = false; return;
+    }
+    populatePatientData(snap.data());
+    setCloudDot('saved');
+    btn.innerHTML = '✅'; setTimeout(() => { btn.innerHTML = orig; btn.disabled = false; }, 1800);
+    document.getElementById('statusText').textContent = `✅ 已載入病歷號 ${chartId} 的資料`;
+    setTimeout(updateStatus, 3000);
+  } catch(e) {
+    setCloudDot('error');
+    alert('載入失敗：' + e.message);
+    btn.innerHTML = orig; btn.disabled = false;
+  }
+}
+
+// Auto-save on any input change
+document.addEventListener('input', e => {
+  const inPatientArea = e.target.closest('.input-panel, .patient-bar');
+  if (inPatientArea) scheduleAutoSave();
+});
 
 // ── Panel resize ───────────────────────────────
 (function() {
