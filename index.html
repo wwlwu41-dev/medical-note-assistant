@@ -278,6 +278,33 @@ textarea { resize:vertical; min-height:80px; line-height:1.6; }
 .output-box[contenteditable=true]:focus { border-color:var(--primary); box-shadow:0 0 0 3px rgba(37,99,235,0.08); outline:none; }
 
 @media (max-width:768px) { .panel-resizer { display:none; } .workspace { grid-template-columns:1fr !important; } }
+
+/* ── Organ System Review ───────────────────────── */
+.sys-view { display:flex; flex:1; overflow:hidden; }
+.sys-body-panel { width:196px; flex-shrink:0; padding:14px 10px; border-right:1px solid var(--border); overflow-y:auto; background:white; display:flex; flex-direction:column; align-items:center; }
+.sys-body-title { font-size:11px; font-weight:700; color:var(--muted); margin-bottom:10px; letter-spacing:0.3px; }
+.sys-table-panel { flex:1; overflow-y:auto; }
+.sys-table { width:100%; border-collapse:collapse; }
+.sys-table th { position:sticky; top:0; background:#f8fafc; padding:10px 13px; text-align:left; font-size:11.5px; color:var(--muted); font-weight:700; border-bottom:2px solid var(--border); white-space:nowrap; z-index:1; }
+.sys-table td { padding:10px 13px; border-bottom:1px solid #f1f5f9; font-size:12.5px; vertical-align:top; line-height:1.55; }
+.sys-table tbody tr { cursor:pointer; transition:background 0.12s; }
+.sys-table tbody tr:hover td { background:#f8fafc; }
+.sys-table tbody tr.hl td { background:#eff6ff; }
+.status-pill { display:inline-block; padding:2px 9px; border-radius:12px; font-size:11px; font-weight:700; }
+.organ-svg-g { cursor:pointer; }
+.organ-svg-g .obg { transition:fill 0.35s; }
+.organ-svg-g:hover .obg { opacity:0.82; }
+.sys-legend { display:flex; flex-direction:column; gap:5px; font-size:10.5px; margin-top:14px; width:100%; padding:0 4px; }
+.sys-legend-item { display:flex; align-items:center; gap:6px; }
+.sys-legend-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+.sys-loading { display:flex; flex:1; flex-direction:column; align-items:center; justify-content:center; gap:10px; color:var(--muted); }
+.organ-svg-g.pulse .obg { animation:organpulse 0.7s ease; }
+@keyframes organpulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+@media(max-width:768px){
+  .sys-view { flex-direction:column; overflow:visible; }
+  .sys-body-panel { width:100%; border-right:none; border-bottom:1px solid var(--border); flex-direction:row; flex-wrap:wrap; justify-content:center; padding:12px; }
+  .sys-table td, .sys-table th { padding:8px 10px; font-size:12px; }
+}
 </style>
 </head>
 <body>
@@ -289,6 +316,7 @@ textarea { resize:vertical; min-height:80px; line-height:1.6; }
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <button class="btn btn-primary" onclick="generateAll()" id="finalBtn" style="font-size:13px;">📋 合併完整病摘</button>
+    <button class="btn btn-secondary" onclick="generateSystemReview()" id="sysBtn" style="font-size:13px;">🫀 器官分析</button>
     <button class="btn btn-secondary" onclick="openSettings()" style="font-size:13px;">⚙️ API 設定</button>
   </div>
 </header>
@@ -445,6 +473,7 @@ textarea { resize:vertical; min-height:80px; line-height:1.6; }
       <div class="output-tab" data-tab="pi"       onclick="switchTab(this)">📝 Present Illness</div>
       <div class="output-tab" data-tab="assess"   onclick="switchTab(this)">📊 Assessment (O)</div>
       <div class="output-tab" data-tab="full"     onclick="switchTab(this)">📋 完整病摘</div>
+      <div class="output-tab" data-tab="system"   onclick="switchTab(this)">🫀 器官系統</div>
     </div>
 
     <div class="output-content-area">
@@ -494,6 +523,104 @@ textarea { resize:vertical; min-height:80px; line-height:1.6; }
           <button class="btn btn-secondary btn-sm" onclick="grammarCheck('out-full', this)">✏️ 修正文法</button>
           <button class="btn btn-success btn-sm" onclick="uploadToGDocs('out-full', this)">☁️ Google 文件</button>
           <button class="btn btn-secondary btn-sm" onclick="printFull()">🖨️ 列印</button>
+        </div>
+      </div>
+
+      <!-- Organ System Review -->
+      <div class="output-pane" id="pane-system">
+        <!-- Loading -->
+        <div class="sys-loading" id="sys-loading" style="display:none">
+          <div class="ld" style="gap:5px"><span style="background:var(--primary);width:8px;height:8px;border-radius:50%;animation:ld 1.2s infinite"></span><span style="background:var(--primary);width:8px;height:8px;border-radius:50%;animation:ld 1.2s .2s infinite"></span><span style="background:var(--primary);width:8px;height:8px;border-radius:50%;animation:ld 1.2s .4s infinite"></span></div>
+          <div style="font-size:13px">AI 正在進行器官系統分析…</div>
+        </div>
+        <!-- Content -->
+        <div class="sys-view" id="sys-content">
+          <!-- Left: SVG body -->
+          <div class="sys-body-panel">
+            <div class="sys-body-title">器官系統狀態圖</div>
+            <svg id="bodySvg" viewBox="0 0 200 430" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:168px">
+              <!-- Body silhouette -->
+              <g fill="#f1f5f9" stroke="#d1d5db" stroke-width="1.4" stroke-linejoin="round">
+                <ellipse cx="100" cy="43" rx="29" ry="33"/>
+                <path d="M89,74 L89,91 L111,91 L111,74 Z"/>
+                <path d="M60,90 C50,95 48,118 48,158 L48,244 C48,251 54,254 62,254 L138,254 C146,254 152,251 152,244 L152,158 C152,118 150,95 140,90 Z"/>
+                <path d="M60,95 C48,102 39,123 35,155 C32,180 34,210 35,223 C36,230 42,232 48,229 C53,226 54,218 54,208 L58,170 C62,144 67,118 74,102 Z"/>
+                <path d="M140,95 C152,102 161,123 165,155 C168,180 166,210 165,223 C164,230 158,232 152,229 C147,226 146,218 146,208 L142,170 C138,144 133,118 126,102 Z"/>
+                <path d="M80,253 L73,325 C71,358 70,382 71,400 C72,408 78,410 85,407 C91,405 93,398 93,388 L97,318 L100,253 Z"/>
+                <path d="M120,253 L127,325 C129,358 130,382 129,400 C128,408 122,410 115,407 C109,405 107,398 107,388 L103,318 L100,253 Z"/>
+              </g>
+              <!-- BRAIN -->
+              <g class="organ-svg-g" id="organ-brain" onclick="highlightOrgan('brain')">
+                <ellipse class="obg" cx="100" cy="37" rx="20" ry="22" fill="#94a3b8"/>
+                <text x="100" y="41" text-anchor="middle" font-size="9.5" fill="white" font-weight="700" pointer-events="none">腦</text>
+              </g>
+              <!-- LUNGS -->
+              <g class="organ-svg-g" id="organ-lung" onclick="highlightOrgan('lung')">
+                <ellipse class="obg" cx="77" cy="132" rx="15" ry="27" fill="#94a3b8"/>
+                <ellipse class="obg" cx="123" cy="132" rx="15" ry="27" fill="#94a3b8"/>
+                <text x="77"  y="136" text-anchor="middle" font-size="8.5" fill="white" font-weight="700" pointer-events="none">肺</text>
+                <text x="123" y="136" text-anchor="middle" font-size="8.5" fill="white" font-weight="700" pointer-events="none">肺</text>
+              </g>
+              <!-- HEART -->
+              <g class="organ-svg-g" id="organ-heart" onclick="highlightOrgan('heart')">
+                <path class="obg" d="M91,119 C87,112 78,112 76,119 C73,128 81,138 91,149 C101,138 109,128 106,119 C104,112 95,112 91,119 Z" fill="#94a3b8"/>
+                <text x="91" y="135" text-anchor="middle" font-size="8.5" fill="white" font-weight="700" pointer-events="none">心</text>
+              </g>
+              <!-- LIVER -->
+              <g class="organ-svg-g" id="organ-liver" onclick="highlightOrgan('liver')">
+                <path class="obg" d="M113,180 C116,173 131,171 142,174 C151,177 153,188 150,197 C147,206 134,210 119,205 C110,200 109,187 113,180 Z" fill="#94a3b8"/>
+                <text x="131" y="193" text-anchor="middle" font-size="8.5" fill="white" font-weight="700" pointer-events="none">肝</text>
+              </g>
+              <!-- KIDNEYS -->
+              <g class="organ-svg-g" id="organ-kidney" onclick="highlightOrgan('kidney')">
+                <ellipse class="obg" cx="66" cy="198" rx="12" ry="17" fill="#94a3b8"/>
+                <ellipse class="obg" cx="134" cy="198" rx="12" ry="17" fill="#94a3b8"/>
+                <text x="66"  y="202" text-anchor="middle" font-size="7.5" fill="white" font-weight="700" pointer-events="none">腎</text>
+                <text x="134" y="202" text-anchor="middle" font-size="7.5" fill="white" font-weight="700" pointer-events="none">腎</text>
+              </g>
+              <!-- GI TRACT -->
+              <g class="organ-svg-g" id="organ-gi" onclick="highlightOrgan('gi')">
+                <ellipse class="obg" cx="100" cy="222" rx="23" ry="19" fill="#94a3b8"/>
+                <text x="100" y="226" text-anchor="middle" font-size="7.5" fill="white" font-weight="700" pointer-events="none">消化道</text>
+              </g>
+              <!-- MSK -->
+              <g class="organ-svg-g" id="organ-msk" onclick="highlightOrgan('msk')">
+                <rect class="obg" x="34" y="148" width="10" height="62" rx="4" fill="#94a3b8" opacity="0.85"/>
+                <rect class="obg" x="156" y="148" width="10" height="62" rx="4" fill="#94a3b8" opacity="0.85"/>
+                <rect class="obg" x="70" y="275" width="10" height="90" rx="4" fill="#94a3b8" opacity="0.85"/>
+                <rect class="obg" x="120" y="275" width="10" height="90" rx="4" fill="#94a3b8" opacity="0.85"/>
+              </g>
+            </svg>
+            <!-- Legend -->
+            <div class="sys-legend">
+              <div class="sys-legend-item"><div class="sys-legend-dot" style="background:#10b981"></div>正常</div>
+              <div class="sys-legend-item"><div class="sys-legend-dot" style="background:#f59e0b"></div>輕度異常</div>
+              <div class="sys-legend-item"><div class="sys-legend-dot" style="background:#ef4444"></div>異常</div>
+              <div class="sys-legend-item"><div class="sys-legend-dot" style="background:#7c3aed"></div>危急</div>
+              <div class="sys-legend-item"><div class="sys-legend-dot" style="background:#94a3b8"></div>未評估</div>
+            </div>
+          </div>
+          <!-- Right: Table -->
+          <div class="sys-table-panel">
+            <table class="sys-table">
+              <thead>
+                <tr>
+                  <th>器官系統</th>
+                  <th>狀態</th>
+                  <th>臨床發現</th>
+                  <th>處置計畫</th>
+                </tr>
+              </thead>
+              <tbody id="sys-table-body">
+                <tr><td colspan="4" style="text-align:center;padding:48px;color:var(--muted)">
+                  點擊右上角「🫀 器官分析」開始分析
+                </td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="output-actions">
+          <button class="btn btn-secondary btn-sm" onclick="copySystemReview()">📋 複製文字摘要</button>
         </div>
       </div>
     </div>
@@ -1193,6 +1320,146 @@ function resetPatientDoc() {
     clearPatientDoc(ptName);
     alert('✅ 已重設，下次上傳將建立新文件');
   }
+}
+
+// ── Organ System Review ────────────────────────
+const ORGAN_SYSTEMS = [
+  { id:'brain',  label:'腦／神經系統', svgId:'organ-brain'  },
+  { id:'heart',  label:'心臟／循環',   svgId:'organ-heart'  },
+  { id:'lung',   label:'肺臟／呼吸',   svgId:'organ-lung'   },
+  { id:'liver',  label:'肝臟',         svgId:'organ-liver'  },
+  { id:'kidney', label:'腎臟',         svgId:'organ-kidney' },
+  { id:'gi',     label:'消化道',       svgId:'organ-gi'     },
+  { id:'msk',    label:'肌肉骨骼',     svgId:'organ-msk'    },
+];
+const STATUS_CFG = {
+  normal:   { fill:'#10b981', label:'正常',     bg:'#d1fae5', color:'#065f46' },
+  mild:     { fill:'#f59e0b', label:'輕度異常', bg:'#fef3c7', color:'#78350f' },
+  abnormal: { fill:'#ef4444', label:'異常',     bg:'#fee2e2', color:'#991b1b' },
+  critical: { fill:'#7c3aed', label:'危急',     bg:'#ede9fe', color:'#4c1d95' },
+  na:       { fill:'#94a3b8', label:'未評估',   bg:'#f1f5f9', color:'#475569' },
+};
+let sysData = null;
+
+async function generateSystemReview() {
+  if (!apiKey) { openSettings(); return; }
+  const timeline = getBoxContent('out-timeline');
+  const pi       = getBoxContent('out-pi');
+  const assess   = getBoxContent('out-assess');
+  const apText   = buildAPText();
+  if (!timeline && !pi && !assess && !apText) {
+    alert('請先完成至少一個步驟的分析（時間軸、PI 或 O Section）'); return;
+  }
+  const pt = getPatientInfo();
+  const btn = document.getElementById('sysBtn');
+  const origLabel = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = `<span class="ld"><span></span><span></span><span></span></span>`;
+  switchTabByName('system');
+  document.getElementById('sys-loading').style.display = 'flex';
+  document.getElementById('sys-content').style.display = 'none';
+
+  const sysPmt = `You are a senior attending physician. Analyze the patient data and classify each organ system.
+Return ONLY valid JSON (no markdown, no preamble) with exactly this structure:
+{"systems":[
+  {"id":"brain", "status":"normal|mild|abnormal|critical|na", "summary":"1-2 sentences in Traditional Chinese", "findings":["..."], "plan":"brief management"},
+  {"id":"heart", ...},
+  {"id":"lung",  ...},
+  {"id":"liver", ...},
+  {"id":"kidney",...},
+  {"id":"gi",    ...},
+  {"id":"msk",   ...}
+]}
+Status guide: normal=no active issue, mild=monitor/minor, abnormal=active problem, critical=life-threatening, na=insufficient data.`;
+
+  const usrPmt = `Patient: ${pt}
+[Timeline]\n${timeline||'(not available)'}
+[Present Illness]\n${pi||'(not available)'}
+[Assessment/O Section]\n${assess||'(not available)'}
+[A and P]\n${apText||'(not filled)'}`;
+
+  try {
+    const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
+      body: JSON.stringify({ model, max_tokens:1200, stream:false,
+        messages:[{role:'system',content:sysPmt},{role:'user',content:usrPmt}]
+      })
+    });
+    if (!resp.ok) { const e=await resp.json().catch(()=>({})); throw new Error(e.error?.message||`HTTP ${resp.status}`); }
+    const data = await resp.json();
+    const raw  = data.choices?.[0]?.message?.content || '';
+    const m    = raw.match(/\{[\s\S]*\}/);
+    if (!m) throw new Error('AI 回傳格式錯誤，請重試');
+    sysData = JSON.parse(m[0]);
+    renderSystemView(sysData);
+  } catch(err) {
+    document.getElementById('sys-loading').style.display = 'none';
+    document.getElementById('sys-content').style.display = 'flex';
+    document.getElementById('sys-table-body').innerHTML =
+      `<tr><td colspan="4" style="text-align:center;padding:40px;color:#ef4444">❌ ${err.message}</td></tr>`;
+  } finally {
+    btn.disabled = false; btn.innerHTML = origLabel;
+  }
+}
+
+function renderSystemView(data) {
+  document.getElementById('sys-loading').style.display = 'none';
+  document.getElementById('sys-content').style.display = 'flex';
+  const systems = data.systems || [];
+
+  // Update SVG organ colors
+  systems.forEach(s => {
+    const cfg   = STATUS_CFG[s.status] || STATUS_CFG.na;
+    const grp   = document.getElementById('organ-' + s.id);
+    if (!grp) return;
+    grp.querySelectorAll('.obg').forEach(el => el.setAttribute('fill', cfg.fill));
+  });
+
+  // Build table
+  const tbody = document.getElementById('sys-table-body');
+  tbody.innerHTML = systems.map((s, i) => {
+    const cfg = STATUS_CFG[s.status] || STATUS_CFG.na;
+    const org = ORGAN_SYSTEMS.find(o => o.id === s.id);
+    const findings = (s.findings || []).filter(Boolean).join('；');
+    return `<tr data-organ="${s.id}" onclick="highlightOrgan('${s.id}')">
+      <td style="white-space:nowrap;font-weight:600">
+        <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${cfg.fill};margin-right:6px;vertical-align:middle"></span>${org?.label||s.id}
+      </td>
+      <td><span class="status-pill" style="background:${cfg.bg};color:${cfg.color}">${cfg.label}</span></td>
+      <td>${s.summary||'—'}${findings?`<br><span style="color:#94a3b8;font-size:11px">${findings}</span>`:''}</td>
+      <td style="color:#475569">${s.plan||'—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+function highlightOrgan(organId) {
+  // Flash SVG organ
+  const grp = document.getElementById('organ-' + organId);
+  if (grp) {
+    grp.classList.add('pulse');
+    setTimeout(() => grp.classList.remove('pulse'), 700);
+  }
+  // Highlight table row
+  document.querySelectorAll('#sys-table-body tr').forEach(r => {
+    r.classList.toggle('hl', r.dataset.organ === organId);
+  });
+}
+
+function copySystemReview() {
+  if (!sysData) { alert('請先執行器官分析'); return; }
+  const lines = ['【器官系統回顧】', ''];
+  (sysData.systems || []).forEach(s => {
+    const cfg = STATUS_CFG[s.status] || STATUS_CFG.na;
+    const org = ORGAN_SYSTEMS.find(o => o.id === s.id);
+    lines.push(`▸ ${org?.label||s.id}（${cfg.label}）`);
+    if (s.summary) lines.push(`  ${s.summary}`);
+    if (s.plan)    lines.push(`  → ${s.plan}`);
+    lines.push('');
+  });
+  navigator.clipboard.writeText(lines.join('\n'))
+    .then(() => { const b=document.querySelector('#pane-system .output-actions .btn'); const t=b.textContent; b.textContent='✅ 已複製'; setTimeout(()=>b.textContent=t,1200); })
+    .catch(() => alert('複製失敗，請手動選取'));
 }
 
 // ── Panel resize ───────────────────────────────
