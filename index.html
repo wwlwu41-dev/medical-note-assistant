@@ -279,6 +279,25 @@ textarea { resize:vertical; min-height:80px; line-height:1.6; }
 
 @media (max-width:768px) { .panel-resizer { display:none; } .workspace { grid-template-columns:1fr !important; } }
 
+/* ── Lab Data ──────────────────────────────────── */
+.lab-view { flex:1; overflow-y:auto; }
+.lab-category { margin:12px 16px; }
+.lab-cat-header { font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.6px; padding:6px 0 4px; border-bottom:2px solid var(--border); margin-bottom:4px; }
+.lab-table { width:100%; border-collapse:collapse; }
+.lab-table td { padding:6px 10px; border-bottom:1px solid #f1f5f9; font-size:12.5px; vertical-align:middle; }
+.lab-table td:first-child { color:var(--text); font-weight:500; }
+.lab-table td:nth-child(2) { font-family:'Courier New',monospace; font-weight:700; font-size:13px; }
+.lab-table td:nth-child(3) { color:var(--muted); font-size:11.5px; }
+.lab-table td:nth-child(4) { color:#94a3b8; font-size:11px; }
+.lab-flag-H  { color:#dc2626; }
+.lab-flag-L  { color:#2563eb; }
+.lab-flag-HH { color:#7c3aed; font-weight:900; }
+.lab-flag-LL { color:#7c3aed; font-weight:900; }
+.lab-flag-N  { color:#10b981; }
+.lab-date-bar { background:#f8fafc; border-bottom:2px solid var(--primary); padding:8px 16px; font-size:12px; font-weight:700; color:var(--primary); display:flex; align-items:center; gap:8px; }
+.lab-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; color:var(--muted); min-height:200px; text-align:center; }
+@media(max-width:768px){ .lab-category { margin:8px 10px; } }
+
 /* ── Organ System Review ───────────────────────── */
 .sys-view { display:flex; flex:1; overflow:hidden; }
 .sys-body-panel { width:196px; flex-shrink:0; padding:14px 10px; border-right:1px solid var(--border); overflow-y:auto; background:white; display:flex; flex-direction:column; align-items:center; }
@@ -471,6 +490,40 @@ textarea { resize:vertical; min-height:80px; line-height:1.6; }
       </div>
     </div>
 
+    <!-- STEP 5: Lab Data -->
+    <div class="section" id="sec5">
+      <div class="section-header" onclick="toggleSection('sec5')">
+        <div class="section-number">5</div>
+        <div class="section-title">貼入檢驗數據（Lab Data）</div>
+        <div class="section-badge">Labs</div>
+        <span class="collapse-icon">▾</span>
+      </div>
+      <div class="section-body" id="sec5-body">
+        <div class="row2">
+          <div class="field">
+            <label>檢驗日期</label>
+            <input type="text" id="labDate" placeholder="例：1/20 或 2026/01/20">
+          </div>
+          <div class="field">
+            <label>來源</label>
+            <select id="labSource">
+              <option value="入院">入院 Lab</option>
+              <option value="追蹤">追蹤 Lab</option>
+              <option value="急診">急診 Lab</option>
+              <option value="門診">門診 Lab</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label>貼入原始檢驗報告（直接從 EMR 複製貼上即可）</label>
+          <textarea id="rawLab" style="min-height:140px;font-family:monospace;font-size:12px;" placeholder="WBC 12.3 K/μL&#10;Hgb 9.8 g/dL&#10;Plt 234 K/μL&#10;Na 135 mEq/L&#10;K 4.2 mEq/L&#10;Cr 1.8 mg/dL&#10;BUN 28 mg/dL&#10;AST 45 U/L...&#10;&#10;支援任何格式，AI 會自動辨識分類"></textarea>
+        </div>
+        <button class="btn btn-primary gen-btn" onclick="parseLab()" id="labBtn">
+          <span id="labBtnTxt">🧪 整理 Lab 數據</span>
+        </button>
+      </div>
+    </div>
+
   </div><!-- end input-panel -->
 
   <div class="panel-resizer" id="panelResizer"></div>
@@ -482,6 +535,7 @@ textarea { resize:vertical; min-height:80px; line-height:1.6; }
       <div class="output-tab" data-tab="pi"       onclick="switchTab(this)">📝 Present Illness</div>
       <div class="output-tab" data-tab="assess"   onclick="switchTab(this)">📊 Assessment (O)</div>
       <div class="output-tab" data-tab="full"     onclick="switchTab(this)">📋 完整病摘</div>
+      <div class="output-tab" data-tab="lab"       onclick="switchTab(this)">🧪 Lab</div>
       <div class="output-tab" data-tab="system"   onclick="switchTab(this)">🫀 器官系統</div>
     </div>
 
@@ -532,6 +586,21 @@ textarea { resize:vertical; min-height:80px; line-height:1.6; }
           <button class="btn btn-secondary btn-sm" onclick="grammarCheck('out-full', this)">✏️ 修正文法</button>
           <button class="btn btn-success btn-sm" onclick="uploadToGDocs('out-full', this)">☁️ Google 文件</button>
           <button class="btn btn-secondary btn-sm" onclick="printFull()">🖨️ 列印</button>
+        </div>
+      </div>
+
+      <!-- Lab Data -->
+      <div class="output-pane" id="pane-lab">
+        <div class="lab-view" id="lab-view">
+          <div class="lab-empty" id="lab-empty">
+            <div style="font-size:40px;opacity:0.3">🧪</div>
+            <div>貼入檢驗報告後<br>點擊「🧪 整理 Lab 數據」</div>
+          </div>
+          <div id="lab-content" style="display:none"></div>
+        </div>
+        <div class="output-actions">
+          <button class="btn btn-secondary btn-sm" onclick="copyLabText()">📋 複製 Lab 摘要</button>
+          <button class="btn btn-secondary btn-sm" onclick="clearAllLabs()">🗑 清除全部</button>
         </div>
       </div>
 
@@ -1361,6 +1430,169 @@ function resetPatientDoc() {
   }
 }
 
+// ── Lab Data ───────────────────────────────────
+let labSessions = []; // [{ date, source, categories:[{name, tests:[{name,value,unit,ref,flag}]}] }]
+
+async function parseLab() {
+  if (!apiKey) { openSettings(); return; }
+  const raw = document.getElementById('rawLab').value.trim();
+  if (!raw) { alert('請先貼入檢驗報告'); return; }
+
+  const date   = document.getElementById('labDate').value.trim() || '未標記日期';
+  const source = document.getElementById('labSource').value;
+
+  const btn    = document.getElementById('labBtn');
+  const btnTxt = document.getElementById('labBtnTxt');
+  btn.disabled = true;
+  btnTxt.innerHTML = `<span class="ld"><span></span><span></span><span></span></span> 解析中...`;
+  switchTabByName('lab');
+
+  const sysPmt = `You are a clinical lab data parser. Parse the raw lab results and return ONLY valid JSON (no markdown, no explanation).
+
+JSON structure:
+{"date":"<date>","source":"<source>","categories":[
+  {"name":"CBC","tests":[{"name":"WBC","value":"12.3","unit":"K/μL","ref":"4.5-11.0","flag":"H"}]},
+  ...
+]}
+
+Categories to use (only include categories with actual data):
+CBC, Biochemistry, LFT, Coagulation, ABG, Urine, Electrolytes, Cardiac, Thyroid, Inflammation, Microbiology, Other
+
+Flag rules:
+- "H"  = high (above upper ref)
+- "L"  = low (below lower ref)
+- "HH" = critically high
+- "LL" = critically low
+- "N"  = normal
+- ""   = no reference available
+
+Common critical values: WBC>30 or <2, Hgb<7, Plt<20, Na<120 or >160, K<2.5 or >6.5, Cr>10, glucose<40 or >500, pH<7.2 or >7.6
+
+If a test has no clear reference range, still include the value and unit, leave flag as "".
+Keep test names in their original form (e.g., "WBC", "Hgb", "Na", "Cr", "AST").
+Return compact JSON only.`;
+
+  const usrPmt = `Date: ${date}\nSource: ${source}\n\nRaw lab data:\n${raw}`;
+
+  try {
+    const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({ model, max_tokens: 1500, stream: false,
+        messages: [{ role: 'system', content: sysPmt }, { role: 'user', content: usrPmt }]
+      })
+    });
+    if (!resp.ok) { const e = await resp.json().catch(()=>({})); throw new Error(e.error?.message || `HTTP ${resp.status}`); }
+    const data = await resp.json();
+    const raw2 = data.choices?.[0]?.message?.content || '';
+    const m    = raw2.match(/\{[\s\S]*\}/);
+    if (!m) throw new Error('AI 回傳格式錯誤，請重試');
+    const parsed = JSON.parse(m[0]);
+    parsed.date   = date;
+    parsed.source = source;
+
+    // Remove existing session with same date+source and prepend new one
+    labSessions = labSessions.filter(s => !(s.date === date && s.source === source));
+    labSessions.unshift(parsed);
+
+    renderLabView();
+    document.getElementById('rawLab').value = '';
+    scheduleAutoSave();
+  } catch(err) {
+    alert('❌ Lab 解析失敗：' + err.message);
+  } finally {
+    btn.disabled = false;
+    btnTxt.innerHTML = '🧪 整理 Lab 數據';
+  }
+}
+
+function flagClass(flag) {
+  return flag === 'HH' || flag === 'LL' ? `lab-flag-${flag}` :
+         flag === 'H' ? 'lab-flag-H' :
+         flag === 'L' ? 'lab-flag-L' :
+         flag === 'N' ? 'lab-flag-N' : '';
+}
+
+function renderLabView() {
+  const empty   = document.getElementById('lab-empty');
+  const content = document.getElementById('lab-content');
+  if (labSessions.length === 0) {
+    empty.style.display = 'flex'; content.style.display = 'none'; return;
+  }
+  empty.style.display = 'none'; content.style.display = 'block';
+
+  content.innerHTML = labSessions.map((session, si) => {
+    const catHTML = (session.categories || []).map(cat => {
+      const rows = (cat.tests || []).map(t => {
+        const fc = flagClass(t.flag);
+        const flagBadge = t.flag ? `<span class="${fc}" style="font-size:11px;font-weight:700;margin-left:4px">${t.flag}</span>` : '';
+        return `<tr>
+          <td>${t.name}</td>
+          <td class="${fc}">${t.value||'—'}${flagBadge}</td>
+          <td>${t.unit||''}</td>
+          <td>${t.ref||''}</td>
+        </tr>`;
+      }).join('');
+      return `<div class="lab-category">
+        <div class="lab-cat-header">${cat.name}</div>
+        <table class="lab-table"><tbody>${rows}</tbody></table>
+      </div>`;
+    }).join('');
+
+    return `<div class="lab-date-bar">
+      🧪 ${session.date} &nbsp;·&nbsp; ${session.source}
+      <button class="btn btn-danger btn-sm" onclick="removeLabSession(${si})" style="margin-left:auto;padding:2px 8px;font-size:11px">✕ 移除</button>
+    </div>${catHTML}`;
+  }).join('');
+}
+
+function removeLabSession(idx) {
+  labSessions.splice(idx, 1);
+  renderLabView();
+  scheduleAutoSave();
+}
+
+function clearAllLabs() {
+  if (labSessions.length === 0) return;
+  if (!confirm('確定清除所有 Lab 記錄？')) return;
+  labSessions = [];
+  renderLabView();
+  scheduleAutoSave();
+}
+
+function copyLabText() {
+  if (labSessions.length === 0) { alert('尚無 Lab 資料'); return; }
+  const lines = ['【檢驗數據摘要】', ''];
+  labSessions.forEach(s => {
+    lines.push(`▸ ${s.date} ${s.source}`);
+    (s.categories || []).forEach(cat => {
+      lines.push(`  [${cat.name}]`);
+      (cat.tests || []).map(t => {
+        const flag = t.flag && t.flag !== 'N' ? ` (${t.flag})` : '';
+        lines.push(`    ${t.name}: ${t.value} ${t.unit||''}${flag}`.trimEnd());
+      });
+    });
+    lines.push('');
+  });
+  navigator.clipboard.writeText(lines.join('\n'))
+    .then(() => { const b = document.querySelector('#pane-lab .output-actions .btn'); const t = b.textContent; b.textContent = '✅ 已複製'; setTimeout(() => b.textContent = t, 1200); })
+    .catch(() => alert('複製失敗，請手動選取'));
+}
+
+function buildLabContext() {
+  if (labSessions.length === 0) return '';
+  return labSessions.map(s => {
+    const cats = (s.categories || []).map(cat => {
+      const tests = (cat.tests || []).map(t => {
+        const flag = t.flag && t.flag !== 'N' ? ` [${t.flag}]` : '';
+        return `${t.name} ${t.value}${t.unit?' '+t.unit:''}${flag}`;
+      }).join(', ');
+      return `${cat.name}: ${tests}`;
+    }).join('; ');
+    return `[${s.date} ${s.source}] ${cats}`;
+  }).join('\n');
+}
+
 // ── Organ System Review ────────────────────────
 const ORGAN_SYSTEMS = [
   { id:'brain',  label:'腦／神經系統', svgId:'organ-brain'  },
@@ -1412,11 +1644,13 @@ Return ONLY valid JSON (no markdown, no preamble) with exactly this structure:
 Status guide: normal=no active issue, mild=monitor/minor, abnormal=active problem, critical=life-threatening, na=insufficient data.
 IMPORTANT: All text fields (summary, findings, plan) MUST be written in Traditional Chinese (繁體中文). Do NOT use Simplified Chinese under any circumstances.`;
 
+  const labCtx = buildLabContext();
   const usrPmt = `Patient: ${pt}
 [Timeline]\n${timeline||'(not available)'}
 [Present Illness]\n${pi||'(not available)'}
 [Assessment/O Section]\n${assess||'(not available)'}
-[A and P]\n${apText||'(not filled)'}`;
+[A and P]\n${apText||'(not filled)'}
+[Lab Data]\n${labCtx||'(not available)'}`;
 
   try {
     const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -1574,8 +1808,9 @@ function collectPatientData() {
     vasoMode,   vasoDetail: get('vasoDetail'),
     nutriSelected: [...nutriSelected],
     nutriDetail: get('nutriDetail'),
-    abxList: JSON.parse(JSON.stringify(abxList)),
-    apList:  JSON.parse(JSON.stringify(apList)),
+    abxList:    JSON.parse(JSON.stringify(abxList)),
+    apList:     JSON.parse(JSON.stringify(apList)),
+    labSessions: JSON.parse(JSON.stringify(labSessions)),
     outTimeline: getBoxContent('out-timeline'),
     outPi:       getBoxContent('out-pi'),
     outAssess:   getBoxContent('out-assess'),
@@ -1605,9 +1840,10 @@ function populatePatientData(data) {
   nutriSelected = data.nutriSelected || [];
   document.querySelectorAll('#nutriTags .tag-btn').forEach(b => b.classList.toggle('active', nutriSelected.includes(b.dataset.val)));
 
-  // ABX & AP
-  abxList = data.abxList || []; renderAbx();
-  apList  = data.apList  || []; renderAP();
+  // ABX, AP & Labs
+  abxList     = data.abxList     || []; renderAbx();
+  apList      = data.apList      || []; renderAP();
+  labSessions = data.labSessions || []; renderLabView();
 
   // Outputs
   const setBox = (id, txt) => {
