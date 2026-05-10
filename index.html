@@ -298,6 +298,18 @@ textarea { resize:vertical; min-height:80px; line-height:1.6; }
 .lab-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; color:var(--muted); min-height:200px; text-align:center; }
 @media(max-width:768px){ .lab-category { margin:8px 10px; } }
 
+/* ── Reports ───────────────────────────────────── */
+.report-view { flex:1; overflow-y:auto; }
+.report-card { border:1px solid var(--border); border-radius:8px; margin:12px 16px; overflow:hidden; }
+.report-card-header { background:#f8fafc; padding:8px 12px; display:flex; align-items:center; gap:8px; border-bottom:1px solid var(--border); }
+.report-type-badge { font-size:11px; padding:2px 9px; border-radius:10px; font-weight:700; flex-shrink:0; }
+.report-findings-list { padding:10px 14px 4px; font-size:12.5px; }
+.report-finding-row { display:flex; gap:6px; padding:3px 0; line-height:1.5; }
+.report-finding-dot { color:var(--muted); flex-shrink:0; margin-top:1px; }
+.report-impression { margin:6px 14px 12px; padding:10px 12px; background:#f0f9ff; border-left:3px solid #0ea5e9; border-radius:0 6px 6px 0; font-size:12.5px; line-height:1.65; color:#0c4a6e; }
+.report-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; color:var(--muted); min-height:200px; text-align:center; }
+@media(max-width:768px){ .report-card { margin:8px 10px; } }
+
 /* ── Organ System Review ───────────────────────── */
 .sys-view { display:flex; flex:1; overflow:hidden; }
 .sys-body-panel { width:196px; flex-shrink:0; padding:14px 10px; border-right:1px solid var(--border); overflow-y:auto; background:white; display:flex; flex-direction:column; align-items:center; }
@@ -524,6 +536,51 @@ textarea { resize:vertical; min-height:80px; line-height:1.6; }
       </div>
     </div>
 
+    <!-- STEP 6: Other Reports -->
+    <div class="section" id="sec6">
+      <div class="section-header" onclick="toggleSection('sec6')">
+        <div class="section-number">6</div>
+        <div class="section-title">其他報告（影像／病理／心電圖…）</div>
+        <div class="section-badge">Reports</div>
+        <span class="collapse-icon">▾</span>
+      </div>
+      <div class="section-body" id="sec6-body">
+        <div class="row3">
+          <div class="field">
+            <label>日期</label>
+            <input type="text" id="reportDate" placeholder="1/20">
+          </div>
+          <div class="field">
+            <label>類型</label>
+            <select id="reportType" onchange="updateReportSubtype()">
+              <option value="影像">影像</option>
+              <option value="病理">病理</option>
+              <option value="心電圖">心電圖</option>
+              <option value="肺功能">肺功能</option>
+              <option value="內視鏡">內視鏡</option>
+              <option value="其他">其他</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>細項</label>
+            <select id="reportSubtype">
+              <option>CXR</option><option>CT胸部</option><option>CT腹部/骨盆</option>
+              <option>CT頭部</option><option>MRI腦</option><option>MRI脊椎</option>
+              <option>心臟超音波</option><option>腹部超音波</option><option>X光</option>
+              <option>PET/CT</option><option>其他</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label>貼入原始報告文字</label>
+          <textarea id="rawReport" style="min-height:130px;font-size:12px;" placeholder="直接貼入報告原文，AI 會自動擷取 Findings 和 Impression…"></textarea>
+        </div>
+        <button class="btn btn-primary gen-btn" onclick="parseReport()" id="reportBtn">
+          <span id="reportBtnTxt">📋 整理報告</span>
+        </button>
+      </div>
+    </div>
+
   </div><!-- end input-panel -->
 
   <div class="panel-resizer" id="panelResizer"></div>
@@ -536,6 +593,7 @@ textarea { resize:vertical; min-height:80px; line-height:1.6; }
       <div class="output-tab" data-tab="assess"   onclick="switchTab(this)">📊 Assessment (O)</div>
       <div class="output-tab" data-tab="full"     onclick="switchTab(this)">📋 完整病摘</div>
       <div class="output-tab" data-tab="lab"       onclick="switchTab(this)">🧪 Lab</div>
+      <div class="output-tab" data-tab="reports"   onclick="switchTab(this)">📋 報告</div>
       <div class="output-tab" data-tab="system"   onclick="switchTab(this)">🫀 器官系統</div>
     </div>
 
@@ -601,6 +659,21 @@ textarea { resize:vertical; min-height:80px; line-height:1.6; }
         <div class="output-actions">
           <button class="btn btn-secondary btn-sm" onclick="copyLabText()">📋 複製 Lab 摘要</button>
           <button class="btn btn-secondary btn-sm" onclick="clearAllLabs()">🗑 清除全部</button>
+        </div>
+      </div>
+
+      <!-- Reports -->
+      <div class="output-pane" id="pane-reports">
+        <div class="report-view" id="report-view">
+          <div class="report-empty" id="report-empty">
+            <div style="font-size:40px;opacity:0.3">📋</div>
+            <div>貼入報告原文後<br>點擊「📋 整理報告」</div>
+          </div>
+          <div id="report-content" style="display:none"></div>
+        </div>
+        <div class="output-actions">
+          <button class="btn btn-secondary btn-sm" onclick="copyReportText()">📋 複製報告摘要</button>
+          <button class="btn btn-secondary btn-sm" onclick="clearAllReports()">🗑 清除全部</button>
         </div>
       </div>
 
@@ -720,7 +793,7 @@ textarea { resize:vertical; min-height:80px; line-height:1.6; }
 
     <!-- Global quick actions -->
     <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
-      <span style="font-size:12px;color:var(--muted)">全域：</span>
+      <span style="font-size:12px;color:var(--muted)">Lab：</span>
       <button class="btn btn-secondary btn-sm" onclick="labPickerSelectAll(true)">全選</button>
       <button class="btn btn-secondary btn-sm" onclick="labPickerSelectAll(false)">全不選</button>
       <button class="btn btn-secondary btn-sm" onclick="labPickerSelectAll('abnormal')">僅選異常值</button>
@@ -1066,14 +1139,14 @@ function generateTimeline() {
   const raw = document.getElementById('rawEmr').value.trim();
   if (!raw) { alert('請先貼入急診 / 門診病歷資料'); return; }
 
-  if (labSessions.length > 0) {
+  if (labSessions.length > 0 || reportSessions.length > 0) {
     openLabPicker(
       items => runTimeline(items),
-      '🧪 選擇要納入時間軸的 Lab 項目',
-      '勾選的數值將以 [Lab] 標記插入時間軸對應日期（預設勾選異常值）'
+      '🧪📋 選擇要納入時間軸的資料',
+      '勾選的 Lab 數值和報告將插入時間軸對應日期（Lab 預設勾選異常值；報告預設全選）'
     );
   } else {
-    runTimeline([]);
+    runTimeline({ labs: [], reports: [] });
   }
 }
 
@@ -1120,6 +1193,28 @@ function openLabPicker(callback, title, desc) {
     </div>`;
   }).join('');
 
+  // Append reports section if any
+  if (reportSessions.length > 0) {
+    const div = document.createElement('div');
+    div.innerHTML = `<div style="font-size:11px;font-weight:700;color:var(--muted);padding:4px 2px 6px;text-transform:uppercase;letter-spacing:0.5px;border-top:1px solid var(--border);margin-top:4px">📋 其他報告</div>` +
+      reportSessions.map((r, ri) => {
+        const tc = REPORT_TYPE_COLORS[r.type] || REPORT_TYPE_COLORS['其他'];
+        const preview = r.impression ? r.impression.slice(0, 60) + (r.impression.length > 60 ? '…' : '') : (r.findings?.[0] || '');
+        return `<label style="display:flex;align-items:flex-start;gap:8px;padding:8px 10px;cursor:pointer;border-radius:6px;font-size:12.5px;transition:background 0.1s" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''">
+          <input type="checkbox" class="report-pick-cb" data-ri="${ri}" checked style="accent-color:var(--primary);width:14px;height:14px;flex-shrink:0;margin-top:2px">
+          <div>
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
+              <span style="font-size:10px;font-weight:700;background:${tc.bg};color:${tc.color};padding:1px 7px;border-radius:8px">${r.type}</span>
+              <span style="font-weight:600">${r.date}</span>
+              <span style="color:var(--muted);font-size:11.5px">${r.subtype}</span>
+            </div>
+            <div style="color:var(--muted);font-size:11.5px">${preview}</div>
+          </div>
+        </label>`;
+      }).join('');
+    list.appendChild(div);
+  }
+
   document.getElementById('labPickerModal').classList.add('active');
 }
 
@@ -1132,12 +1227,17 @@ function collectPickerItems() {
     if (!bySession[si]) bySession[si] = { date: s.date, source: s.source, tests: [] };
     bySession[si].tests.push(t);
   });
-  return Object.values(bySession);
+  const reports = [];
+  document.querySelectorAll('.report-pick-cb:checked').forEach(cb => {
+    const ri = parseInt(cb.dataset.ri);
+    if (reportSessions[ri]) reports.push(reportSessions[ri]);
+  });
+  return { labs: Object.values(bySession), reports };
 }
 
-function buildLabSection(items) {
-  if (!items || items.length === 0) return '';
-  return items.map(s => {
+function buildLabSection(labItems) {
+  if (!labItems || labItems.length === 0) return '';
+  return labItems.map(s => {
     const tests = s.tests.map(t => {
       const flag = t.flag && t.flag !== 'N' ? ` (${t.flag})` : '';
       return `${t.name} ${t.value}${t.unit ? ' ' + t.unit : ''}${flag}`;
@@ -1146,9 +1246,17 @@ function buildLabSection(items) {
   }).join('\n');
 }
 
+function buildReportSection(reports) {
+  if (!reports || reports.length === 0) return '';
+  return reports.map(r => {
+    const findings = (r.findings || []).slice(0, 4).join('; ');
+    return `[${r.date} · ${r.type} ${r.subtype}] Impression: ${r.impression || ''}${findings ? ` | Findings: ${findings}` : ''}`;
+  }).join('\n');
+}
+
 function labPickerSkip() {
   document.getElementById('labPickerModal').classList.remove('active');
-  if (_labPickerCallback) _labPickerCallback([]);
+  if (_labPickerCallback) _labPickerCallback({ labs: [], reports: [] });
 }
 
 function labPickerConfirm() {
@@ -1182,34 +1290,40 @@ function labPickerSession(si, mode) {
 }
 
 async function runTimeline(selectedItems) {
-
   const raw = document.getElementById('rawEmr').value.trim();
   const pt  = getPatientInfo();
 
-  const hasLabs = selectedItems && selectedItems.length > 0;
-  const labSection = buildLabSection(selectedItems);
+  const labItems  = selectedItems?.labs    || [];
+  const repItems  = selectedItems?.reports || [];
+  const hasLabs   = labItems.length > 0;
+  const hasReports = repItems.length > 0;
+  const hasAny    = hasLabs || hasReports;
+  const labSection    = buildLabSection(labItems);
+  const reportSection = buildReportSection(repItems);
 
   const sys = `You are a senior resident physician organizing patient medical records.
 Create a chronological Timeline in English using ONLY the information explicitly provided in the inputs below.
 
 CRITICAL RULES:
-- Use ONLY information explicitly stated in the inputs provided (clinical records${hasLabs ? ' AND lab results' : ''})
+- Use ONLY information explicitly stated in the inputs provided
 - Do NOT add, infer, or speculate about any medical information not present in the inputs
 - Do NOT suggest diagnoses or clinical interpretations not mentioned
 - If dates are unclear, use only what is stated (e.g., "~2 weeks ago")
-${hasLabs ? `- MANDATORY: You MUST insert every lab result provided under "Lab Results" as [Lab] lines at their correct dates — omitting them is not allowed` : ''}
+${hasLabs    ? `- MANDATORY: Insert every lab result from [Lab Results] as a [Lab] line at its date — omitting them is not allowed` : ''}
+${hasReports ? `- MANDATORY: Insert every report from [Reports] as a [Report] line at its date — omitting them is not allowed` : ''}
 
 Format:
 - One event per line: date/time + brief description (under 15 words)
 - Strictly chronological order
 - Use standard abbreviations (c/o, s/p, Hx of, Dx, Tx, CXR, CBC, etc.)
-${hasLabs ? `- Lab line format:  date  [Lab] TestName Value Unit Flag, e.g.:
-  1/20  [Lab] WBC 12.3 K/μL ↑, Hgb 9.8 g/dL ↓, Cr 1.8 mg/dL ↑, Na 132 mEq/L ↓
-- Use ↑ for H/HH flags and ↓ for L/LL flags; include ALL lab items listed (user has already filtered what they want)
-- Place each [Lab] entry at the matching date within the chronological flow` : ''}
+${hasLabs    ? `- Lab line:    date  [Lab] Name Value Unit ↑/↓, e.g.:  1/20  [Lab] WBC 12.3 K/μL ↑, Hgb 9.8 g/dL ↓
+  Use ↑ for H/HH and ↓ for L/LL; include ALL lab items listed` : ''}
+${hasReports ? `- Report line: date  [Report] Type — Impression, e.g.:  1/20  [Report] CT胸部 — RLL consolidation with moderate right pleural effusion` : ''}
 - Output only the timeline, no preamble`;
 
-  const usr = `Patient: ${pt}\n\n[Clinical Records]\n${raw}${hasLabs ? `\n\n[Lab Results — MUST be included as [Lab] lines in the timeline]\n${labSection}` : ''}`;
+  const usr = `Patient: ${pt}\n\n[Clinical Records]\n${raw}`
+    + (hasLabs    ? `\n\n[Lab Results — MUST be included as [Lab] lines]\n${labSection}`       : '')
+    + (hasReports ? `\n\n[Reports — MUST be included as [Report] lines]\n${reportSection}` : '');
 
   switchTabByName('timeline');
   await callGroq(sys, usr,
@@ -1224,14 +1338,14 @@ function generatePI() {
   const timeline = getBoxContent('out-timeline');
   if (!timeline) { alert('請先整理時間軸（Step 1）'); return; }
 
-  if (labSessions.length > 0) {
+  if (labSessions.length > 0 || reportSessions.length > 0) {
     openLabPicker(
       items => runPI(items),
-      '🧪 選擇要納入 Present Illness 的 Lab 項目',
-      '勾選的檢驗數值將自然融入 PI 敘述（預設勾選異常值）'
+      '🧪📋 選擇要納入 Present Illness 的資料',
+      '勾選的 Lab 數值和報告結果將自然融入 PI 敘述（預設勾選異常值；報告預設全選）'
     );
   } else {
-    runPI([]);
+    runPI({ labs: [], reports: [] });
   }
 }
 
@@ -1239,19 +1353,24 @@ async function runPI(selectedItems) {
   const timeline  = getBoxContent('out-timeline');
   const interview = document.getElementById('interview').value.trim();
   const pt        = getPatientInfo();
-  const hasLabs   = selectedItems && selectedItems.length > 0;
-  const labSection = buildLabSection(selectedItems);
+  const labItems   = selectedItems?.labs    || [];
+  const repItems   = selectedItems?.reports || [];
+  const hasLabs    = labItems.length > 0;
+  const hasReports = repItems.length > 0;
+  const labSection    = buildLabSection(labItems);
+  const reportSection = buildReportSection(repItems);
 
+  const hasAny = hasLabs || hasReports;
   const sys = `You are a senior resident physician skilled at writing fluent Present Illness narratives.
-Based ONLY on the provided timeline, interview notes${hasLabs ? ', and lab results' : ''}, write a well-structured Present Illness in English.
+Based ONLY on the provided timeline, interview notes${hasAny ? ', lab results, and/or report findings' : ''}, write a well-structured Present Illness in English.
 
 CRITICAL RULES:
 - Use ONLY information explicitly provided in the inputs below
 - Do NOT add any symptoms, lab values, diagnoses, medications, or clinical details not mentioned
 - Do NOT speculate or fill gaps with assumed medical information
 - If information is incomplete, reflect that naturally — do NOT invent details
-${hasLabs ? `- Incorporate the selected lab findings naturally within the narrative (e.g., "Labs on admission revealed WBC 12.3 K/μL (↑), Hgb 9.8 g/dL (↓), Cr 1.8 mg/dL (↑)")
-- Use ↑ for H/HH flags and ↓ for L/LL flags when mentioning lab values` : ''}
+${hasLabs    ? `- Incorporate lab findings naturally (e.g., "Labs on admission revealed WBC 12.3 K/μL (↑), Hgb 9.8 g/dL (↓)"); use ↑ for H/HH and ↓ for L/LL` : ''}
+${hasReports ? `- Incorporate imaging/report findings naturally in the narrative (e.g., "CXR showed bilateral infiltrates...")` : ''}
 
 Format:
 - Narrative paragraph style (NOT bullet points)
@@ -1260,13 +1379,9 @@ Format:
 - 2-4 paragraphs, approximately 150-300 words
 - Output only the PI narrative, no preamble`;
 
-  const usr = `Patient: ${pt}
-
-[Timeline]
-${timeline}
-
-[Interview / additional history]
-${interview || '(none provided)'}${hasLabs ? `\n\n[Selected Lab Results]\n${labSection}` : ''}`;
+  const usr = `Patient: ${pt}\n\n[Timeline]\n${timeline}\n\n[Interview / additional history]\n${interview || '(none provided)'}`
+    + (hasLabs    ? `\n\n[Lab Results]\n${labSection}`    : '')
+    + (hasReports ? `\n\n[Reports]\n${reportSection}` : '');
 
   switchTabByName('pi');
   await callGroq(sys, usr,
@@ -1763,6 +1878,144 @@ function buildLabContext() {
   }).join('\n');
 }
 
+// ── Reports ────────────────────────────────────
+let reportSessions = [];
+
+const REPORT_SUBTYPES = {
+  '影像':  ['CXR','CT胸部','CT腹部/骨盆','CT頭部','MRI腦','MRI脊椎','心臟超音波','腹部超音波','X光','PET/CT','其他'],
+  '病理':  ['切片病理','手術檢體','細胞學','Bone marrow biopsy','其他'],
+  '心電圖':['12-lead ECG','Holter monitor','其他'],
+  '肺功能':['Spirometry','Full PFT + DLCO','Bronchodilator test','其他'],
+  '內視鏡':['上消化道內視鏡','大腸鏡','支氣管鏡','EUS','ERCP','其他'],
+  '其他':  ['其他'],
+};
+const REPORT_TYPE_COLORS = {
+  '影像':  { bg:'#eff6ff', color:'#2563eb' },
+  '病理':  { bg:'#faf5ff', color:'#7c3aed' },
+  '心電圖':{ bg:'#fff1f2', color:'#e11d48' },
+  '肺功能':{ bg:'#f0fdf4', color:'#16a34a' },
+  '內視鏡':{ bg:'#fff7ed', color:'#ea580c' },
+  '其他':  { bg:'#f8fafc', color:'#64748b' },
+};
+
+function updateReportSubtype() {
+  const type = document.getElementById('reportType').value;
+  const sub  = document.getElementById('reportSubtype');
+  sub.innerHTML = (REPORT_SUBTYPES[type] || ['其他']).map(s => `<option>${s}</option>`).join('');
+}
+
+async function parseReport() {
+  if (!apiKey) { openSettings(); return; }
+  const raw     = document.getElementById('rawReport').value.trim();
+  if (!raw) { alert('請先貼入報告原文'); return; }
+  const date    = document.getElementById('reportDate').value.trim()   || '未標記日期';
+  const type    = document.getElementById('reportType').value;
+  const subtype = document.getElementById('reportSubtype').value;
+
+  const btn    = document.getElementById('reportBtn');
+  const btnTxt = document.getElementById('reportBtnTxt');
+  btn.disabled = true;
+  btnTxt.innerHTML = `<span class="ld"><span></span><span></span><span></span></span> 解析中...`;
+  switchTabByName('reports');
+
+  const sysPmt = `You are a clinical report parser. Parse the following ${type} report (${subtype}) and return ONLY valid JSON (no markdown, no explanation).
+
+JSON structure:
+{"findings":["finding sentence 1","finding sentence 2"],"impression":"One to two sentence overall conclusion"}
+
+Rules:
+- findings: list each key clinical finding as a concise sentence (10-25 words each); include all significant findings
+- impression: the overall conclusion or diagnosis from the report
+- Preserve the original language (Traditional Chinese or English) — do NOT translate
+- Do NOT add, infer, or speculate beyond what is stated in the report
+- Return compact JSON only`;
+
+  try {
+    const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({ model, max_tokens: 800, stream: false,
+        messages: [{ role: 'system', content: sysPmt }, { role: 'user', content: raw }]
+      })
+    });
+    if (!resp.ok) { const e = await resp.json().catch(()=>({})); throw new Error(e.error?.message || `HTTP ${resp.status}`); }
+    const data   = await resp.json();
+    const rawStr = data.choices?.[0]?.message?.content || '';
+    const m      = rawStr.match(/\{[\s\S]*\}/);
+    if (!m) throw new Error('AI 回傳格式錯誤，請重試');
+    const parsed = JSON.parse(m[0]);
+    const session = { date, type, subtype, findings: parsed.findings || [], impression: parsed.impression || '' };
+
+    // Replace same date+type+subtype, otherwise prepend
+    const idx = reportSessions.findIndex(s => s.date === date && s.type === type && s.subtype === subtype);
+    if (idx >= 0) reportSessions.splice(idx, 1, session);
+    else reportSessions.unshift(session);
+
+    renderReportView();
+    document.getElementById('rawReport').value = '';
+    scheduleAutoSave();
+  } catch(err) {
+    alert('❌ 報告解析失敗：' + err.message);
+  } finally {
+    btn.disabled = false;
+    btnTxt.innerHTML = '📋 整理報告';
+  }
+}
+
+function renderReportView() {
+  const empty   = document.getElementById('report-empty');
+  const content = document.getElementById('report-content');
+  if (reportSessions.length === 0) {
+    empty.style.display = 'flex'; content.style.display = 'none'; return;
+  }
+  empty.style.display = 'none'; content.style.display = 'block';
+
+  content.innerHTML = reportSessions.map((r, ri) => {
+    const tc = REPORT_TYPE_COLORS[r.type] || REPORT_TYPE_COLORS['其他'];
+    const findings = (r.findings || []).map(f =>
+      `<div class="report-finding-row"><span class="report-finding-dot">•</span><span>${f}</span></div>`
+    ).join('');
+    return `<div class="report-card">
+      <div class="report-card-header">
+        <span class="report-type-badge" style="background:${tc.bg};color:${tc.color}">${r.type}</span>
+        <span style="font-weight:700;font-size:13px">${r.date}</span>
+        <span style="font-size:12px;color:var(--muted)">${r.subtype}</span>
+        <button class="btn btn-danger btn-sm" onclick="removeReport(${ri})" style="margin-left:auto;padding:2px 8px;font-size:11px">✕ 移除</button>
+      </div>
+      ${findings ? `<div class="report-findings-list">${findings}</div>` : ''}
+      ${r.impression ? `<div class="report-impression">📌 ${r.impression}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function removeReport(idx) {
+  reportSessions.splice(idx, 1);
+  renderReportView();
+  scheduleAutoSave();
+}
+
+function clearAllReports() {
+  if (reportSessions.length === 0) return;
+  if (!confirm('確定清除所有報告記錄？')) return;
+  reportSessions = [];
+  renderReportView();
+  scheduleAutoSave();
+}
+
+function copyReportText() {
+  if (reportSessions.length === 0) { alert('尚無報告資料'); return; }
+  const lines = ['【報告摘要】', ''];
+  reportSessions.forEach(r => {
+    lines.push(`▸ ${r.date} ${r.type} — ${r.subtype}`);
+    (r.findings || []).forEach(f => lines.push(`  • ${f}`));
+    if (r.impression) lines.push(`  → ${r.impression}`);
+    lines.push('');
+  });
+  navigator.clipboard.writeText(lines.join('\n'))
+    .then(() => { const b = document.querySelector('#pane-reports .output-actions .btn'); const t = b.textContent; b.textContent = '✅ 已複製'; setTimeout(() => b.textContent = t, 1200); })
+    .catch(() => alert('複製失敗'));
+}
+
 // ── Organ System Review ────────────────────────
 const ORGAN_SYSTEMS = [
   { id:'brain',  label:'腦／神經系統', svgId:'organ-brain'  },
@@ -1814,13 +2067,15 @@ Return ONLY valid JSON (no markdown, no preamble) with exactly this structure:
 Status guide: normal=no active issue, mild=monitor/minor, abnormal=active problem, critical=life-threatening, na=insufficient data.
 IMPORTANT: All text fields (summary, findings, plan) MUST be written in Traditional Chinese (繁體中文). Do NOT use Simplified Chinese under any circumstances.`;
 
-  const labCtx = buildLabContext();
+  const labCtx    = buildLabContext();
+  const reportCtx = buildReportSection(reportSessions);
   const usrPmt = `Patient: ${pt}
 [Timeline]\n${timeline||'(not available)'}
 [Present Illness]\n${pi||'(not available)'}
 [Assessment/O Section]\n${assess||'(not available)'}
 [A and P]\n${apText||'(not filled)'}
-[Lab Data]\n${labCtx||'(not available)'}`;
+[Lab Data]\n${labCtx||'(not available)'}
+[Reports]\n${reportCtx||'(not available)'}`;
 
   try {
     const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -1980,7 +2235,8 @@ function collectPatientData() {
     nutriDetail: get('nutriDetail'),
     abxList:    JSON.parse(JSON.stringify(abxList)),
     apList:     JSON.parse(JSON.stringify(apList)),
-    labSessions: JSON.parse(JSON.stringify(labSessions)),
+    labSessions:    JSON.parse(JSON.stringify(labSessions)),
+    reportSessions: JSON.parse(JSON.stringify(reportSessions)),
     outTimeline: getBoxContent('out-timeline'),
     outPi:       getBoxContent('out-pi'),
     outAssess:   getBoxContent('out-assess'),
@@ -2013,7 +2269,8 @@ function populatePatientData(data) {
   // ABX, AP & Labs
   abxList     = data.abxList     || []; renderAbx();
   apList      = data.apList      || []; renderAP();
-  labSessions = data.labSessions || []; renderLabView();
+  labSessions    = data.labSessions    || []; renderLabView();
+  reportSessions = data.reportSessions || []; renderReportView();
 
   // Outputs
   const setBox = (id, txt) => {
