@@ -714,23 +714,24 @@ textarea { resize:vertical; min-height:80px; line-height:1.6; }
 <!-- Settings Modal -->
 <!-- Lab Session Picker Modal -->
 <div class="modal-overlay" id="labPickerModal">
-  <div class="modal" style="max-width:440px">
-    <div class="modal-title">🧪 選擇要納入時間軸的 Lab 資料</div>
-    <div style="font-size:12.5px;color:var(--muted);margin-bottom:12px">勾選要整合的檢驗批次，AI 將把 lab 結果插入時間軸對應日期</div>
+  <div class="modal" style="max-width:600px;max-height:90vh;display:flex;flex-direction:column;padding:24px 24px 20px">
+    <div class="modal-title" style="margin-bottom:8px">🧪 選擇要納入時間軸的檢驗項目</div>
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:12px">逐項勾選，AI 將把選取的數值插入時間軸對應日期（預設勾選異常值）</div>
 
-    <!-- Quick filter -->
-    <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
-      <span style="font-size:12px;color:var(--muted);align-self:center">快速篩選：</span>
+    <!-- Global quick actions -->
+    <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+      <span style="font-size:12px;color:var(--muted)">全域：</span>
       <button class="btn btn-secondary btn-sm" onclick="labPickerSelectAll(true)">全選</button>
       <button class="btn btn-secondary btn-sm" onclick="labPickerSelectAll(false)">全不選</button>
+      <button class="btn btn-secondary btn-sm" onclick="labPickerSelectAll('abnormal')">僅選異常值</button>
     </div>
 
-    <!-- Session list -->
-    <div id="labPickerList" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;"></div>
+    <!-- Session list (scrollable) -->
+    <div id="labPickerList" style="overflow-y:auto;flex:1;min-height:0;display:flex;flex-direction:column;gap:10px;"></div>
 
-    <div class="modal-footer">
+    <div class="modal-footer" style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
       <button class="btn btn-secondary" onclick="runTimeline(false)">略過（不含 Lab）</button>
-      <button class="btn btn-primary"   onclick="runTimeline(true)">🗓 整理時間軸（含選取 Lab）</button>
+      <button class="btn btn-primary"   onclick="runTimeline(true)">🗓 整理時間軸（含選取項目）</button>
     </div>
   </div>
 </div>
@@ -1072,23 +1073,69 @@ function generateTimeline() {
   }
 }
 
+function isAbnormalFlag(flag) { return ['H','HH','L','LL'].includes(flag); }
+
 function openLabPicker() {
   const list = document.getElementById('labPickerList');
-  list.innerHTML = labSessions.map((s, i) => {
-    const cats = (s.categories || []).map(c => c.name).join('、');
-    return `<label style="display:flex;align-items:flex-start;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;font-size:13px;transition:background 0.1s" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''">
-      <input type="checkbox" class="lab-pick-cb" data-idx="${i}" checked style="margin-top:2px;flex-shrink:0;width:15px;height:15px;accent-color:var(--primary)">
-      <div>
-        <div style="font-weight:600">${s.date} &nbsp;<span style="font-size:11px;background:#f0f4ff;color:var(--primary);padding:1px 7px;border-radius:10px;font-weight:600">${s.source}</span></div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px">${cats || '(無分類)'}</div>
+  list.innerHTML = labSessions.map((s, si) => {
+    const catBlocks = (s.categories || []).map((cat, ci) => {
+      const testRows = (cat.tests || []).map((t, ti) => {
+        const flag = t.flag || '';
+        const abnormal = isAbnormalFlag(flag);
+        const flagColor = flag === 'HH' || flag === 'LL' ? '#7c3aed' : flag === 'H' ? '#dc2626' : flag === 'L' ? '#2563eb' : '#64748b';
+        const flagBadge = flag && flag !== 'N' ? `<span style="font-size:10px;font-weight:800;color:${flagColor};margin-left:3px">${flag}</span>` : '';
+        return `<label style="display:flex;align-items:center;gap:8px;padding:5px 10px;cursor:pointer;border-radius:5px;font-size:12.5px;transition:background 0.1s" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''">
+          <input type="checkbox" class="lab-pick-cb" data-si="${si}" data-ci="${ci}" data-ti="${ti}" ${abnormal ? 'checked' : ''} style="accent-color:var(--primary);width:14px;height:14px;flex-shrink:0">
+          <span style="flex:1;color:${abnormal ? 'var(--text)' : 'var(--muted)'}">${t.name}</span>
+          <span style="font-family:monospace;font-weight:700;color:${abnormal ? flagColor : 'var(--text)'}">${t.value||'—'}${flagBadge}</span>
+          <span style="color:#94a3b8;font-size:11px;width:52px;text-align:right">${t.unit||''}</span>
+        </label>`;
+      }).join('');
+      return `<div style="margin-bottom:4px">
+        <div style="font-size:10.5px;font-weight:700;color:var(--muted);padding:3px 10px;text-transform:uppercase;letter-spacing:0.5px;margin-top:4px">${cat.name}</div>
+        ${testRows}
+      </div>`;
+    }).join('');
+
+    return `<div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;flex-shrink:0">
+      <div style="background:#f8fafc;padding:8px 12px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border)">
+        <span style="font-weight:700;font-size:13px">${s.date}</span>
+        <span style="font-size:11px;background:#f0f4ff;color:var(--primary);padding:1px 8px;border-radius:10px;font-weight:600">${s.source}</span>
+        <div style="margin-left:auto;display:flex;gap:5px">
+          <button class="btn btn-secondary btn-sm" onclick="labPickerSession(${si},true)"  style="padding:2px 8px;font-size:11px">全選</button>
+          <button class="btn btn-secondary btn-sm" onclick="labPickerSession(${si},false)" style="padding:2px 8px;font-size:11px">全不選</button>
+          <button class="btn btn-secondary btn-sm" onclick="labPickerSession(${si},'abnormal')" style="padding:2px 8px;font-size:11px">僅異常</button>
+        </div>
       </div>
-    </label>`;
+      <div style="padding:6px 4px">${catBlocks}</div>
+    </div>`;
   }).join('');
+
   document.getElementById('labPickerModal').classList.add('active');
 }
 
-function labPickerSelectAll(checked) {
-  document.querySelectorAll('.lab-pick-cb').forEach(cb => cb.checked = checked);
+function labPickerSelectAll(mode) {
+  document.querySelectorAll('.lab-pick-cb').forEach(cb => {
+    if (mode === 'abnormal') {
+      const si = parseInt(cb.dataset.si), ci = parseInt(cb.dataset.ci), ti = parseInt(cb.dataset.ti);
+      const flag = labSessions[si]?.categories?.[ci]?.tests?.[ti]?.flag || '';
+      cb.checked = isAbnormalFlag(flag);
+    } else {
+      cb.checked = !!mode;
+    }
+  });
+}
+
+function labPickerSession(si, mode) {
+  document.querySelectorAll(`.lab-pick-cb[data-si="${si}"]`).forEach(cb => {
+    if (mode === 'abnormal') {
+      const ci = parseInt(cb.dataset.ci), ti = parseInt(cb.dataset.ti);
+      const flag = labSessions[si]?.categories?.[ci]?.tests?.[ti]?.flag || '';
+      cb.checked = isAbnormalFlag(flag);
+    } else {
+      cb.checked = !!mode;
+    }
+  });
 }
 
 async function runTimeline(withLabs) {
@@ -1097,23 +1144,29 @@ async function runTimeline(withLabs) {
   const raw = document.getElementById('rawEmr').value.trim();
   const pt  = getPatientInfo();
 
-  let selectedSessions = [];
+  // Collect individually checked test items, grouped by session
+  const bySession = {};
   if (withLabs) {
     document.querySelectorAll('.lab-pick-cb:checked').forEach(cb => {
-      const idx = parseInt(cb.dataset.idx);
-      if (labSessions[idx]) selectedSessions.push(labSessions[idx]);
+      const si = parseInt(cb.dataset.si);
+      const ci = parseInt(cb.dataset.ci);
+      const ti = parseInt(cb.dataset.ti);
+      const s  = labSessions[si];
+      const t  = s?.categories?.[ci]?.tests?.[ti];
+      if (!s || !t) return;
+      if (!bySession[si]) bySession[si] = { date: s.date, source: s.source, tests: [] };
+      bySession[si].tests.push(t);
     });
   }
 
+  const selectedSessions = Object.values(bySession);
   const hasLabs = selectedSessions.length > 0;
 
   const labSection = hasLabs ? selectedSessions.map(s => {
-    const tests = (s.categories || []).map(cat =>
-      (cat.tests || []).map(t => {
-        const flag = t.flag && t.flag !== 'N' ? ` (${t.flag})` : '';
-        return `${t.name} ${t.value}${t.unit?' '+t.unit:''}${flag}`;
-      }).join(', ')
-    ).filter(Boolean).join('; ');
+    const tests = s.tests.map(t => {
+      const flag = t.flag && t.flag !== 'N' ? ` (${t.flag})` : '';
+      return `${t.name} ${t.value}${t.unit ? ' ' + t.unit : ''}${flag}`;
+    }).join(', ');
     return `[${s.date} · ${s.source}] ${tests}`;
   }).join('\n') : '';
 
