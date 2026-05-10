@@ -1,0 +1,18 @@
+{
+  "name": "住院醫師病歷助手",
+  "short_name": "病歷助手",
+  "description": "住院醫師病歷產生與整理工具",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#2563eb",
+  "background_color": "#ffffff",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
