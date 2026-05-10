@@ -1190,25 +1190,26 @@ async function runTimeline(selectedItems) {
   const labSection = buildLabSection(selectedItems);
 
   const sys = `You are a senior resident physician organizing patient medical records.
-Extract and organize ONLY the events explicitly stated in the raw records into a chronological Timeline written in English.
+Create a chronological Timeline in English using ONLY the information explicitly provided in the inputs below.
 
 CRITICAL RULES:
-- Only include events and information explicitly stated in the provided text
-- Do NOT add, infer, or speculate about any medical information not present
-- Do NOT suggest diagnoses or clinical interpretations not mentioned in the records
+- Use ONLY information explicitly stated in the inputs provided (clinical records${hasLabs ? ' AND lab results' : ''})
+- Do NOT add, infer, or speculate about any medical information not present in the inputs
+- Do NOT suggest diagnoses or clinical interpretations not mentioned
 - If dates are unclear, use only what is stated (e.g., "~2 weeks ago")
+${hasLabs ? `- MANDATORY: You MUST insert every lab result provided under "Lab Results" as [Lab] lines at their correct dates — omitting them is not allowed` : ''}
 
 Format:
 - One event per line: date/time + brief description (under 15 words)
 - Strictly chronological order
 - Use standard abbreviations (c/o, s/p, Hx of, Dx, Tx, CXR, CBC, etc.)
-${hasLabs ? `- For lab data lines, use prefix "[Lab]" and list only abnormal/notable values concisely, e.g.:
-  1/20  [Lab] WBC 12.3↑, Hgb 9.8↓, Cr 1.8↑, Na 132↓
-- Place [Lab] lines at the correct date in the chronological order
-- Only flag values marked H/HH with ↑ and L/LL with ↓; omit normal values unless all results are normal` : ''}
+${hasLabs ? `- Lab line format:  date  [Lab] TestName Value Unit Flag, e.g.:
+  1/20  [Lab] WBC 12.3 K/μL ↑, Hgb 9.8 g/dL ↓, Cr 1.8 mg/dL ↑, Na 132 mEq/L ↓
+- Use ↑ for H/HH flags and ↓ for L/LL flags; include ALL lab items listed (user has already filtered what they want)
+- Place each [Lab] entry at the matching date within the chronological flow` : ''}
 - Output only the timeline, no preamble`;
 
-  const usr = `Patient: ${pt}\n\nRaw medical records:\n${raw}${hasLabs ? `\n\nLab Results to integrate:\n${labSection}` : ''}`;
+  const usr = `Patient: ${pt}\n\n[Clinical Records]\n${raw}${hasLabs ? `\n\n[Lab Results — MUST be included as [Lab] lines in the timeline]\n${labSection}` : ''}`;
 
   switchTabByName('timeline');
   await callGroq(sys, usr,
