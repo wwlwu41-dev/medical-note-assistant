@@ -715,8 +715,8 @@ textarea { resize:vertical; min-height:80px; line-height:1.6; }
 <!-- Lab Session Picker Modal -->
 <div class="modal-overlay" id="labPickerModal">
   <div class="modal" style="max-width:600px;max-height:90vh;display:flex;flex-direction:column;padding:24px 24px 20px">
-    <div class="modal-title" style="margin-bottom:8px">🧪 選擇要納入時間軸的檢驗項目</div>
-    <div style="font-size:12.5px;color:var(--muted);margin-bottom:12px">逐項勾選，AI 將把選取的數值插入時間軸對應日期（預設勾選異常值）</div>
+    <div class="modal-title" style="margin-bottom:8px" id="labPickerTitle">🧪 選擇要納入的 Lab 項目</div>
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:12px" id="labPickerDesc">逐項勾選，AI 將把選取的數值整合至輸出（預設勾選異常值）</div>
 
     <!-- Global quick actions -->
     <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
@@ -730,8 +730,8 @@ textarea { resize:vertical; min-height:80px; line-height:1.6; }
     <div id="labPickerList" style="overflow-y:auto;flex:1;min-height:0;display:flex;flex-direction:column;gap:10px;"></div>
 
     <div class="modal-footer" style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
-      <button class="btn btn-secondary" onclick="runTimeline(false)">略過（不含 Lab）</button>
-      <button class="btn btn-primary"   onclick="runTimeline(true)">🗓 整理時間軸（含選取項目）</button>
+      <button class="btn btn-secondary" onclick="labPickerSkip()">略過（不含 Lab）</button>
+<button class="btn btn-primary" onclick="labPickerConfirm()" id="labPickerConfirmBtn">套用並繼續</button>
     </div>
   </div>
 </div>
@@ -1067,15 +1067,24 @@ function generateTimeline() {
   if (!raw) { alert('請先貼入急診 / 門診病歷資料'); return; }
 
   if (labSessions.length > 0) {
-    openLabPicker();
+    openLabPicker(
+      items => runTimeline(items),
+      '🧪 選擇要納入時間軸的 Lab 項目',
+      '勾選的數值將以 [Lab] 標記插入時間軸對應日期（預設勾選異常值）'
+    );
   } else {
-    runTimeline(false);
+    runTimeline([]);
   }
 }
 
 function isAbnormalFlag(flag) { return ['H','HH','L','LL'].includes(flag); }
 
-function openLabPicker() {
+let _labPickerCallback = null;
+
+function openLabPicker(callback, title, desc) {
+  _labPickerCallback = callback;
+  document.getElementById('labPickerTitle').textContent = title || '🧪 選擇要納入的 Lab 項目';
+  document.getElementById('labPickerDesc').textContent  = desc  || '逐項勾選，AI 將把選取的數值整合至輸出（預設勾選異常值）';
   const list = document.getElementById('labPickerList');
   list.innerHTML = labSessions.map((s, si) => {
     const catBlocks = (s.categories || []).map((cat, ci) => {
@@ -1114,6 +1123,40 @@ function openLabPicker() {
   document.getElementById('labPickerModal').classList.add('active');
 }
 
+function collectPickerItems() {
+  const bySession = {};
+  document.querySelectorAll('.lab-pick-cb:checked').forEach(cb => {
+    const si = parseInt(cb.dataset.si), ci = parseInt(cb.dataset.ci), ti = parseInt(cb.dataset.ti);
+    const s = labSessions[si], t = s?.categories?.[ci]?.tests?.[ti];
+    if (!s || !t) return;
+    if (!bySession[si]) bySession[si] = { date: s.date, source: s.source, tests: [] };
+    bySession[si].tests.push(t);
+  });
+  return Object.values(bySession);
+}
+
+function buildLabSection(items) {
+  if (!items || items.length === 0) return '';
+  return items.map(s => {
+    const tests = s.tests.map(t => {
+      const flag = t.flag && t.flag !== 'N' ? ` (${t.flag})` : '';
+      return `${t.name} ${t.value}${t.unit ? ' ' + t.unit : ''}${flag}`;
+    }).join(', ');
+    return `[${s.date} · ${s.source}] ${tests}`;
+  }).join('\n');
+}
+
+function labPickerSkip() {
+  document.getElementById('labPickerModal').classList.remove('active');
+  if (_labPickerCallback) _labPickerCallback([]);
+}
+
+function labPickerConfirm() {
+  const items = collectPickerItems();
+  document.getElementById('labPickerModal').classList.remove('active');
+  if (_labPickerCallback) _labPickerCallback(items);
+}
+
 function labPickerSelectAll(mode) {
   document.querySelectorAll('.lab-pick-cb').forEach(cb => {
     if (mode === 'abnormal') {
@@ -1138,37 +1181,13 @@ function labPickerSession(si, mode) {
   });
 }
 
-async function runTimeline(withLabs) {
-  document.getElementById('labPickerModal').classList.remove('active');
+async function runTimeline(selectedItems) {
 
   const raw = document.getElementById('rawEmr').value.trim();
   const pt  = getPatientInfo();
 
-  // Collect individually checked test items, grouped by session
-  const bySession = {};
-  if (withLabs) {
-    document.querySelectorAll('.lab-pick-cb:checked').forEach(cb => {
-      const si = parseInt(cb.dataset.si);
-      const ci = parseInt(cb.dataset.ci);
-      const ti = parseInt(cb.dataset.ti);
-      const s  = labSessions[si];
-      const t  = s?.categories?.[ci]?.tests?.[ti];
-      if (!s || !t) return;
-      if (!bySession[si]) bySession[si] = { date: s.date, source: s.source, tests: [] };
-      bySession[si].tests.push(t);
-    });
-  }
-
-  const selectedSessions = Object.values(bySession);
-  const hasLabs = selectedSessions.length > 0;
-
-  const labSection = hasLabs ? selectedSessions.map(s => {
-    const tests = s.tests.map(t => {
-      const flag = t.flag && t.flag !== 'N' ? ` (${t.flag})` : '';
-      return `${t.name} ${t.value}${t.unit ? ' ' + t.unit : ''}${flag}`;
-    }).join(', ');
-    return `[${s.date} · ${s.source}] ${tests}`;
-  }).join('\n') : '';
+  const hasLabs = selectedItems && selectedItems.length > 0;
+  const labSection = buildLabSection(selectedItems);
 
   const sys = `You are a senior resident physician organizing patient medical records.
 Extract and organize ONLY the events explicitly stated in the raw records into a chronological Timeline written in English.
@@ -1200,20 +1219,38 @@ ${hasLabs ? `- For lab data lines, use prefix "[Lab]" and list only abnormal/not
 }
 
 // ── Generate PI ────────────────────────────────
-async function generatePI() {
+function generatePI() {
   const timeline = getBoxContent('out-timeline');
-  const interview = document.getElementById('interview').value.trim();
   if (!timeline) { alert('請先整理時間軸（Step 1）'); return; }
 
-  const pt  = getPatientInfo();
+  if (labSessions.length > 0) {
+    openLabPicker(
+      items => runPI(items),
+      '🧪 選擇要納入 Present Illness 的 Lab 項目',
+      '勾選的檢驗數值將自然融入 PI 敘述（預設勾選異常值）'
+    );
+  } else {
+    runPI([]);
+  }
+}
+
+async function runPI(selectedItems) {
+  const timeline  = getBoxContent('out-timeline');
+  const interview = document.getElementById('interview').value.trim();
+  const pt        = getPatientInfo();
+  const hasLabs   = selectedItems && selectedItems.length > 0;
+  const labSection = buildLabSection(selectedItems);
+
   const sys = `You are a senior resident physician skilled at writing fluent Present Illness narratives.
-Based ONLY on the provided timeline and interview notes, write a well-structured Present Illness in English.
+Based ONLY on the provided timeline, interview notes${hasLabs ? ', and lab results' : ''}, write a well-structured Present Illness in English.
 
 CRITICAL RULES:
-- Use ONLY information explicitly stated in the timeline and interview notes
+- Use ONLY information explicitly provided in the inputs below
 - Do NOT add any symptoms, lab values, diagnoses, medications, or clinical details not mentioned
 - Do NOT speculate or fill gaps with assumed medical information
 - If information is incomplete, reflect that naturally — do NOT invent details
+${hasLabs ? `- Incorporate the selected lab findings naturally within the narrative (e.g., "Labs on admission revealed WBC 12.3 K/μL (↑), Hgb 9.8 g/dL (↓), Cr 1.8 mg/dL (↑)")
+- Use ↑ for H/HH flags and ↓ for L/LL flags when mentioning lab values` : ''}
 
 Format:
 - Narrative paragraph style (NOT bullet points)
@@ -1228,7 +1265,7 @@ Format:
 ${timeline}
 
 [Interview / additional history]
-${interview || '(none provided)'}`;
+${interview || '(none provided)'}${hasLabs ? `\n\n[Selected Lab Results]\n${labSection}` : ''}`;
 
   switchTabByName('pi');
   await callGroq(sys, usr,
